@@ -40,7 +40,7 @@
         
         <h3>Step 1: Preparing Malaria Time Series Data</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Load required packages
 library(dplyr)
 library(ggplot2)
@@ -75,7 +75,7 @@ autoplot(malaria_ts) +
     y = "Number of Cases"
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -91,7 +91,7 @@ autoplot(malaria_ts) +
         
         <h3>Step 2: Classical Decomposition</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Perform classical decomposition
 decomp_classical <- decompose(malaria_ts)
 
@@ -151,7 +151,7 @@ ggplot(monthly_seasonality, aes(x = factor(month), y = seasonal_factor, group = 
     y = "Seasonal Effect"
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -167,7 +167,7 @@ ggplot(monthly_seasonality, aes(x = factor(month), y = seasonal_factor, group = 
         
         <h3>Step 3: STL Decomposition (Seasonal and Trend using Loess)</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # STL Decomposition is more flexible than classical decomposition
 stl_decomp <- stl(malaria_ts, s.window = "periodic")
 
@@ -220,7 +220,7 @@ var_seasonal <- var(stl_df$seasonal, na.rm = TRUE)
 var_remainder <- var(stl_df$remainder, na.rm = TRUE)
 seasonal_strength <- max(0, 1 - var_remainder / (var_seasonal + var_remainder))
 cat("Seasonal strength:", round(seasonal_strength * 100, 1), "%\n")
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -236,7 +236,7 @@ cat("Seasonal strength:", round(seasonal_strength * 100, 1), "%\n")
         
         <h3>Step 4: Adjusting for Seasonality and Identifying Anomalies</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Calculate seasonally adjusted series
 seasonally_adjusted <- malaria_ts - decomp_classical$seasonal
 
@@ -300,7 +300,7 @@ anomalies <- stl_df %>%
   arrange(desc(abs(remainder)))
 
 print(head(anomalies, 10))
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -318,7 +318,7 @@ print(head(anomalies, 10))
         
         <h3>Step 1: Simple Moving Averages</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Apply simple moving averages to smooth the data
 library(zoo)
 
@@ -359,7 +359,7 @@ ggplot(ma_df, aes(x = date)) +
     color = "Series"
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -376,7 +376,7 @@ ggplot(ma_df, aes(x = date)) +
         
         <h3>Step 2: Weighted Moving Averages</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Create weighted moving averages
 # Weighted MA gives more importance to recent observations
 
@@ -409,7 +409,7 @@ ggplot(ma_df, aes(x = date)) +
     color = "Series"
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -425,7 +425,7 @@ ggplot(ma_df, aes(x = date)) +
         
         <h3>Step 3: Exponential Smoothing with forecast Package</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Simple Exponential Smoothing (SES)
 # Good for data with no clear trend or seasonality
 ses_model <- ses(malaria_ts, h = 12)  # Forecast 12 months ahead
@@ -488,7 +488,7 @@ ggplot(smoothing_df, aes(x = date)) +
 # Compare accuracy of different smoothing methods
 accuracy(ses_model)
 accuracy(hw_model)
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -505,7 +505,7 @@ accuracy(hw_model)
         
         <h3>Step 4: Advanced ETS Models (Error, Trend, Seasonal)</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # ETS models automatically select the best exponential smoothing model
 ets_model <- ets(malaria_ts)
 
@@ -572,7 +572,7 @@ ggplot() +
     caption = paste("Model:", ets_model$method)
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -591,7 +591,7 @@ ggplot() +
         
         <h3>Step 1: Understanding ARIMA Components</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # ARIMA (AutoRegressive Integrated Moving Average) modeling
 
 # First, check for stationarity with ACF and PACF plots
@@ -612,7 +612,7 @@ ggtsdisplay(diff(diff(malaria_ts, 12), 1),
 # KPSS test for stationarity
 kpss_test <- kpss.test(malaria_ts)
 print(kpss_test)
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -629,7 +629,7 @@ print(kpss_test)
         
         <h3>Step 2: Automatic ARIMA Modeling</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Automatically select the best ARIMA model
 auto_arima <- auto.arima(malaria_ts, seasonal = TRUE, 
                         stepwise = FALSE, approximation = FALSE)
@@ -674,7 +674,7 @@ autoplot(arima_forecast) +
     y = "Number of Cases"
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -691,7 +691,7 @@ autoplot(arima_forecast) +
         
         <h3>Step 3: Manual ARIMA Model Selection</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Manually fit ARIMA models and compare
 # ARIMA(p,d,q)(P,D,Q)[s] has components:
 # p: autoregressive order
@@ -761,7 +761,7 @@ ggplot(validation_df, aes(x = date)) +
     color = "Series"
   ) +
   theme_minimal()
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -778,7 +778,7 @@ ggplot(validation_df, aes(x = date)) +
         
         <h3>Step 4: ARIMA Models with External Regressors</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # ARIMAX: ARIMA with external variables (e.g., rainfall, temperature)
 # Assume we have a data frame with external predictors
 malaria_with_predictors <- malaria_data %>%
@@ -853,7 +853,7 @@ autoplot(arimax_forecast) +
 cat("AICc without external regressors:", auto_arima$aicc, "\n")
 cat("AICc with external regressors:", arimax_model$aicc, "\n")
 cat("Improvement:", auto_arima$aicc - arimax_model$aicc, "\n")
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
@@ -870,7 +870,7 @@ cat("Improvement:", auto_arima$aicc - arimax_model$aicc, "\n")
         
         <h3>Step 5: Evaluating and Implementing Forecasts</h3>
         <div class="r-code">
-            <code>
+            <pre><code>
 # Final model evaluation and implementation
 
 # Select the best model (assuming ARIMAX was best)
@@ -959,7 +959,7 @@ monthly_format <- forecast_export %>%
   select(year, month_name, point_forecast, risk_level, recommended_action)
 
 print(monthly_format)
-            </code>
+            </code></pre>
         </div>
         
         <div class="explanation">
