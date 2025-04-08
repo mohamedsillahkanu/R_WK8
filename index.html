@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Week 8: Time Series Analysis & Forecasting</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <button class="sidebar-toggle" id="sidebar-toggle">Menu</button>
+    
+    <div class="sidebar" id="sidebar">
+        <h3>Course Navigation</h3>
+        <ul>
+            <li class="menu-item">
+                <a href="#week8">📅 Week 8: Time Series Analysis</a>
+                <ul class="sub-menu">
+                    <li><a href="#decomposition">Time Series Decomposition</a></li>
+                    <li><a href="#smoothing">Moving Averages & Smoothing</a></li>
+                    <li><a href="#arima">ARIMA Modeling & Forecasting</a></li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+    
+    <div class="container">
+        <h1 id="week8">📅 Week 8: Time Series Analysis & Forecasting</h1>
+        
+        <p>This week, we will:<br>
+        ✅ <strong>Decompose malaria case trends</strong> using <code>stl()</code><br>
+        ✅ <strong>Apply smoothing techniques</strong> with <code>zoo</code> and <code>forecast</code> packages<br>
+        ✅ <strong>Build ARIMA models</strong> for malaria case prediction</p>
+        
+        <hr>
+        
+        <h2 id="decomposition">1️⃣ Decomposing Malaria Case Trends</h2>
+        
+        <h3>Why Decompose Time Series?</h3>
+        <p>📌 <strong>Time series decomposition</strong> breaks down malaria case data into components like trend, seasonality, and random fluctuation, helping us understand underlying patterns and drivers of disease transmission.</p>
+        
+        <h3>Step 1: Preparing Malaria Time Series Data</h3>
+        <div class="r-code">
+            <code>
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(stats)
+library(zoo)
+library(forecast)
+
+# Load malaria data
+malaria_data <- read.csv("malaria_monthly.csv")
+
+# Examine the structure
+head(malaria_data)
+summary(malaria_data)
+
+# Create a proper time series object
+# Assuming data has year and month columns
+malaria_data <- malaria_data %>%
+  mutate(date = as.Date(paste(year, month, "01", sep = "-"))) %>%
+  arrange(date)
+
+# Convert to ts object for decomposition
+# Assuming we have monthly data
+malaria_ts <- ts(malaria_data$cases, 
+                frequency = 12, 
+                start = c(malaria_data$year[1], malaria_data$month[1]))
+
+# Plot the time series
+autoplot(malaria_ts) +
+  labs(
+    title = "Monthly Malaria Cases",
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ A proper time series analysis requires a formal time series object<br>
+            ✔ <code>ts()</code> creates a time series object in R<br>
+            ✔ <code>frequency = 12</code> indicates monthly data (12 observations per year)<br>
+            ✔ <code>start</code> parameter specifies when the time series begins<br>
+            ✔ <code>autoplot()</code> from the forecast package creates a clean time series visualization</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 2: Classical Decomposition</h3>
+        <div class="r-code">
+            <code>
+# Perform classical decomposition
+decomp_classical <- decompose(malaria_ts)
+
+# Plot the decomposition components
+plot(decomp_classical)
+
+# Extract and examine components
+trend <- decomp_classical$trend
+seasonal <- decomp_classical$seasonal
+random <- decomp_classical$random
+
+# Create a cleaner visualization with ggplot2
+decomp_df <- data.frame(
+  date = malaria_data$date,
+  observed = as.numeric(malaria_ts),
+  trend = as.numeric(trend),
+  seasonal = as.numeric(seasonal),
+  random = as.numeric(random)
+) %>%
+  tidyr::drop_na()  # Remove NAs from the ends of trend
+
+# Plot observed vs trend
+ggplot(decomp_df, aes(x = date)) +
+  geom_line(aes(y = observed), color = "gray60") +
+  geom_line(aes(y = trend), color = "blue", size = 1.2) +
+  labs(
+    title = "Malaria Cases with Trend Component",
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+
+# Plot seasonal component
+ggplot(decomp_df, aes(x = date, y = seasonal)) +
+  geom_line(color = "forestgreen") +
+  labs(
+    title = "Seasonal Component of Malaria Cases",
+    x = "Year",
+    y = "Seasonal Effect"
+  ) +
+  theme_minimal()
+
+# Extracting monthly seasonal factors
+monthly_seasonality <- data.frame(
+  month = 1:12,
+  seasonal_factor = as.numeric(seasonal)[1:12]
+)
+
+# Visualize the monthly seasonal pattern
+ggplot(monthly_seasonality, aes(x = factor(month), y = seasonal_factor, group = 1)) +
+  geom_line() +
+  geom_point() +
+  scale_x_discrete(labels = month.abb) +
+  labs(
+    title = "Monthly Seasonal Pattern of Malaria Cases",
+    x = "Month",
+    y = "Seasonal Effect"
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ <code>decompose()</code> breaks the time series into trend, seasonal, and random components<br>
+            ✔ The trend component shows the long-term progression of malaria cases<br>
+            ✔ The seasonal component reveals cyclical patterns that repeat each year<br>
+            ✔ The random component captures unexplained variations, possibly due to outbreaks<br>
+            ✔ Classical decomposition assumes additive components (components sum to the original series)</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 3: STL Decomposition (Seasonal and Trend using Loess)</h3>
+        <div class="r-code">
+            <code>
+# STL Decomposition is more flexible than classical decomposition
+stl_decomp <- stl(malaria_ts, s.window = "periodic")
+
+# Plot STL decomposition
+plot(stl_decomp)
+
+# Convert to data frame for ggplot
+stl_df <- data.frame(
+  date = malaria_data$date,
+  observed = as.numeric(malaria_ts),
+  trend = as.numeric(stl_decomp$time.series[,"trend"]),
+  seasonal = as.numeric(stl_decomp$time.series[,"seasonal"]),
+  remainder = as.numeric(stl_decomp$time.series[,"remainder"])
+) %>%
+  tidyr::drop_na()
+
+# Create a more sophisticated visualization of components
+library(patchwork)  # For combining plots
+
+p1 <- ggplot(stl_df, aes(x = date, y = observed)) +
+  geom_line() +
+  labs(title = "Observed", y = "Cases") +
+  theme_minimal()
+
+p2 <- ggplot(stl_df, aes(x = date, y = trend)) +
+  geom_line(color = "blue") +
+  labs(title = "Trend", y = "Cases") +
+  theme_minimal()
+
+p3 <- ggplot(stl_df, aes(x = date, y = seasonal)) +
+  geom_line(color = "forestgreen") +
+  labs(title = "Seasonal", y = "Effect") +
+  theme_minimal()
+
+p4 <- ggplot(stl_df, aes(x = date, y = remainder)) +
+  geom_line(color = "red") +
+  labs(title = "Remainder", y = "Effect") +
+  theme_minimal()
+
+# Combine all plots
+combined_plot <- p1 / p2 / p3 / p4
+combined_plot + plot_annotation(
+  title = "STL Decomposition of Malaria Cases",
+  subtitle = "Using Seasonal and Trend decomposition via Loess",
+  caption = "Data source: Monthly malaria surveillance data"
+)
+
+# Calculate the seasonal strength
+var_seasonal <- var(stl_df$seasonal, na.rm = TRUE)
+var_remainder <- var(stl_df$remainder, na.rm = TRUE)
+seasonal_strength <- max(0, 1 - var_remainder / (var_seasonal + var_remainder))
+cat("Seasonal strength:", round(seasonal_strength * 100, 1), "%\n")
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ <code>stl()</code> (Seasonal and Trend decomposition using Loess) is more flexible than classical decomposition<br>
+            ✔ <code>s.window = "periodic"</code> assumes a stable seasonal pattern<br>
+            ✔ STL can handle changing seasonal patterns and is robust to outliers<br>
+            ✔ <code>patchwork</code> package makes it easy to combine multiple plots<br>
+            ✔ Seasonal strength quantifies how much of the variation is due to seasonality</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 4: Adjusting for Seasonality and Identifying Anomalies</h3>
+        <div class="r-code">
+            <code>
+# Calculate seasonally adjusted series
+seasonally_adjusted <- malaria_ts - decomp_classical$seasonal
+
+# Plot original vs. seasonally adjusted
+adj_df <- data.frame(
+  date = malaria_data$date,
+  original = as.numeric(malaria_ts),
+  adjusted = as.numeric(seasonally_adjusted)
+) %>%
+  tidyr::drop_na()
+
+ggplot(adj_df, aes(x = date)) +
+  geom_line(aes(y = original, color = "Original")) +
+  geom_line(aes(y = adjusted, color = "Seasonally Adjusted")) +
+  scale_color_manual(values = c("Original" = "gray50", "Seasonally Adjusted" = "blue")) +
+  labs(
+    title = "Original vs. Seasonally Adjusted Malaria Cases",
+    x = "Year",
+    y = "Number of Cases",
+    color = "Series"
+  ) +
+  theme_minimal()
+
+# Identify anomalies in the remainder component
+# Values more than 2 standard deviations from mean
+sd_remainder <- sd(stl_df$remainder, na.rm = TRUE)
+mean_remainder <- mean(stl_df$remainder, na.rm = TRUE)
+threshold <- 2 * sd_remainder
+
+stl_df <- stl_df %>%
+  mutate(
+    anomaly = abs(remainder) > threshold,
+    anomaly_direction = case_when(
+      remainder > threshold ~ "Above",
+      remainder < -threshold ~ "Below",
+      TRUE ~ "Normal"
+    )
+  )
+
+# Visualize anomalies
+ggplot(stl_df, aes(x = date, y = remainder)) +
+  geom_line(color = "gray60") +
+  geom_point(data = filter(stl_df, anomaly), 
+             aes(color = anomaly_direction), size = 2) +
+  geom_hline(yintercept = c(-threshold, threshold), 
+             linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("Above" = "red", "Below" = "blue")) +
+  labs(
+    title = "Anomaly Detection in Malaria Cases",
+    subtitle = "Points outside dashed lines are potential anomalies",
+    x = "Year",
+    y = "Remainder",
+    color = "Anomaly Type"
+  ) +
+  theme_minimal()
+
+# List the dates with anomalies
+anomalies <- stl_df %>%
+  filter(anomaly) %>%
+  select(date, observed, trend, seasonal, remainder, anomaly_direction) %>%
+  arrange(desc(abs(remainder)))
+
+print(head(anomalies, 10))
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ Seasonally adjusted series removes seasonal patterns to focus on trend and irregular components<br>
+            ✔ This adjustment helps compare values across different times of year<br>
+            ✔ Anomaly detection identifies unusual spikes or drops in cases<br>
+            ✔ Values beyond ±2 standard deviations in the remainder component are flagged as anomalies<br>
+            ✔ Investigating anomalies can reveal outbreaks or data quality issues</p>
+        </div>
+        
+        <hr>
+        
+        <h2 id="smoothing">2️⃣ Moving Averages & Smoothing Techniques</h2>
+        
+        <h3>Step 1: Simple Moving Averages</h3>
+        <div class="r-code">
+            <code>
+# Apply simple moving averages to smooth the data
+library(zoo)
+
+# Calculate 3-month moving average
+ma3 <- rollmean(malaria_ts, k = 3, align = "right")
+
+# Calculate 6-month moving average
+ma6 <- rollmean(malaria_ts, k = 6, align = "right")
+
+# Calculate 12-month moving average
+ma12 <- rollmean(malaria_ts, k = 12, align = "center")
+
+# Combine into a data frame for plotting
+ma_df <- data.frame(
+  date = malaria_data$date,
+  original = as.numeric(malaria_ts)
+) %>%
+  mutate(
+    ma3 = c(rep(NA, 2), as.numeric(ma3)),
+    ma6 = c(rep(NA, 5), as.numeric(ma6)),
+    ma12 = c(rep(NA, 6), as.numeric(ma12), rep(NA, 5))
+  )
+
+# Plot different moving averages
+ggplot(ma_df, aes(x = date)) +
+  geom_line(aes(y = original, color = "Original"), alpha = 0.5) +
+  geom_line(aes(y = ma3, color = "3-Month MA"), size = 1) +
+  geom_line(aes(y = ma6, color = "6-Month MA"), size = 1) +
+  geom_line(aes(y = ma12, color = "12-Month MA"), size = 1) +
+  scale_color_manual(
+    values = c("Original" = "gray60", "3-Month MA" = "#1b9e77", 
+               "6-Month MA" = "#d95f02", "12-Month MA" = "#7570b3")
+  ) +
+  labs(
+    title = "Malaria Cases with Moving Averages",
+    x = "Year",
+    y = "Number of Cases",
+    color = "Series"
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ Moving averages smooth out short-term fluctuations to highlight longer-term trends<br>
+            ✔ <code>rollmean()</code> from the zoo package calculates moving averages<br>
+            ✔ The parameter <code>k</code> controls the window size (number of periods to average)<br>
+            ✔ <code>align</code> determines whether the average is centered, right-aligned, or left-aligned<br>
+            ✔ Shorter windows (e.g., 3-month) follow the data more closely but retain more noise<br>
+            ✔ Longer windows (e.g., 12-month) show smoother trends but respond more slowly to changes</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 2: Weighted Moving Averages</h3>
+        <div class="r-code">
+            <code>
+# Create weighted moving averages
+# Weighted MA gives more importance to recent observations
+
+# Define weights (more recent observations get higher weights)
+weights3 <- c(0.2, 0.3, 0.5)  # For 3-month WMA
+weights6 <- c(0.05, 0.05, 0.1, 0.2, 0.25, 0.35)  # For 6-month WMA
+
+# Calculate weighted moving averages
+wma3 <- rollmean(malaria_ts, k = 3, align = "right", weights = weights3)
+wma6 <- rollmean(malaria_ts, k = 6, align = "right", weights = weights6)
+
+# Add to data frame
+ma_df$wma3 <- c(rep(NA, 2), as.numeric(wma3))
+ma_df$wma6 <- c(rep(NA, 5), as.numeric(wma6))
+
+# Compare simple and weighted moving averages
+ggplot(ma_df, aes(x = date)) +
+  geom_line(aes(y = original, color = "Original"), alpha = 0.3) +
+  geom_line(aes(y = ma3, color = "Simple 3-Month MA")) +
+  geom_line(aes(y = wma3, color = "Weighted 3-Month MA"), linetype = "dashed") +
+  scale_color_manual(
+    values = c("Original" = "gray60", "Simple 3-Month MA" = "blue", 
+               "Weighted 3-Month MA" = "red")
+  ) +
+  labs(
+    title = "Simple vs. Weighted Moving Average (3-Month)",
+    subtitle = "Weighted MA gives more importance to recent observations",
+    x = "Year",
+    y = "Number of Cases",
+    color = "Series"
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ Weighted moving averages assign different importance to observations within the window<br>
+            ✔ Typically, more recent observations receive higher weights<br>
+            ✔ <code>weights</code> parameter in <code>rollmean()</code> specifies these weights<br>
+            ✔ Weighted MAs can respond more quickly to recent changes while still smoothing noise<br>
+            ✔ This approach can be useful when recent malaria trends are more important for forecasting</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 3: Exponential Smoothing with forecast Package</h3>
+        <div class="r-code">
+            <code>
+# Simple Exponential Smoothing (SES)
+# Good for data with no clear trend or seasonality
+ses_model <- ses(malaria_ts, h = 12)  # Forecast 12 months ahead
+
+# Plot SES model and forecast
+autoplot(ses_model) +
+  labs(
+    title = "Simple Exponential Smoothing of Malaria Cases",
+    subtitle = paste("Alpha =", round(ses_model$model$par["alpha"], 3)),
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+
+# Holt-Winters Exponential Smoothing
+# For data with trend and seasonality
+hw_model <- hw(malaria_ts, seasonal = "additive", h = 12)
+
+# Plot Holt-Winters model and forecast
+autoplot(hw_model) +
+  labs(
+    title = "Holt-Winters Forecasting of Malaria Cases",
+    subtitle = paste("Alpha =", round(hw_model$model$par["alpha"], 3),
+                    "Beta =", round(hw_model$model$par["beta"], 3),
+                    "Gamma =", round(hw_model$model$par["gamma"], 3)),
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+
+# Extract the smoothed values
+ses_fitted <- ses_model$fitted
+hw_fitted <- hw_model$fitted
+
+# Combine with original data for comparison
+smoothing_df <- data.frame(
+  date = malaria_data$date,
+  original = as.numeric(malaria_ts),
+  ses = c(NA, as.numeric(ses_fitted)),
+  hw = c(NA, as.numeric(hw_fitted))
+)
+
+# Plot comparison of methods
+ggplot(smoothing_df, aes(x = date)) +
+  geom_line(aes(y = original, color = "Original"), alpha = 0.4) +
+  geom_line(aes(y = ses, color = "Simple Exp. Smoothing"), size = 0.8) +
+  geom_line(aes(y = hw, color = "Holt-Winters"), size = 0.8) +
+  scale_color_manual(
+    values = c("Original" = "gray60", "Simple Exp. Smoothing" = "orange", 
+               "Holt-Winters" = "purple")
+  ) +
+  labs(
+    title = "Comparison of Smoothing Methods for Malaria Cases",
+    x = "Year",
+    y = "Number of Cases",
+    color = "Method"
+  ) +
+  theme_minimal()
+
+# Compare accuracy of different smoothing methods
+accuracy(ses_model)
+accuracy(hw_model)
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ Exponential smoothing assigns exponentially decreasing weights to older observations<br>
+            ✔ <code>ses()</code> performs Simple Exponential Smoothing for data without trend or seasonality<br>
+            ✔ The <code>alpha</code> parameter controls the smoothing level (higher = less smoothing)<br>
+            ✔ <code>hw()</code> implements Holt-Winters method for data with trend and seasonality<br>
+            ✔ Parameters <code>beta</code> and <code>gamma</code> control smoothing of trend and seasonal components<br>
+            ✔ <code>accuracy()</code> provides error metrics like RMSE, MAE, and MAPE to compare methods</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 4: Advanced ETS Models (Error, Trend, Seasonal)</h3>
+        <div class="r-code">
+            <code>
+# ETS models automatically select the best exponential smoothing model
+ets_model <- ets(malaria_ts)
+
+# Examine the selected model
+summary(ets_model)
+
+# Plot the components of the ETS model
+autoplot(ets_model) +
+  labs(
+    title = "Components from ETS Model",
+    subtitle = paste("Model:", ets_model$method)
+  ) +
+  theme_minimal()
+
+# Generate forecasts from the ETS model
+ets_forecast <- forecast(ets_model, h = 24)  # 24 months ahead
+
+# Plot the forecast
+autoplot(ets_forecast) +
+  labs(
+    title = "ETS Forecast of Malaria Cases",
+    subtitle = paste("Model:", ets_model$method),
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+
+# Extract forecasted values and prediction intervals
+forecast_df <- data.frame(
+  date = seq.Date(from = max(malaria_data$date) + 30, by = "month", length.out = 24),
+  point_forecast = as.numeric(ets_forecast$mean),
+  lower_80 = as.numeric(ets_forecast$lower[, 1]),
+  upper_80 = as.numeric(ets_forecast$upper[, 1]),
+  lower_95 = as.numeric(ets_forecast$lower[, 2]),
+  upper_95 = as.numeric(ets_forecast$upper[, 2])
+)
+
+# Combine with historical data for a complete plot
+historical_df <- data.frame(
+  date = malaria_data$date,
+  observed = as.numeric(malaria_ts)
+)
+
+# Create a custom visualization of the forecast
+ggplot() +
+  # Historical data
+  geom_line(data = historical_df, aes(x = date, y = observed), color = "black") +
+  # Point forecast
+  geom_line(data = forecast_df, aes(x = date, y = point_forecast), 
+            color = "blue", size = 1) +
+  # 95% prediction interval
+  geom_ribbon(data = forecast_df, 
+              aes(x = date, ymin = lower_95, ymax = upper_95), 
+              fill = "blue", alpha = 0.2) +
+  # 80% prediction interval
+  geom_ribbon(data = forecast_df, 
+              aes(x = date, ymin = lower_80, ymax = upper_80), 
+              fill = "blue", alpha = 0.3) +
+  labs(
+    title = "Malaria Cases: Historical Data and ETS Forecast",
+    subtitle = "With 80% and 95% prediction intervals",
+    x = "Year",
+    y = "Number of Cases",
+    caption = paste("Model:", ets_model$method)
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ ETS models automatically select the best exponential smoothing approach<br>
+            ✔ ETS stands for Error, Trend, Seasonal - the three components of the model<br>
+            ✔ <code>ets()</code> chooses between additive and multiplicative versions of each component<br>
+            ✔ <code>forecast()</code> generates future predictions with prediction intervals<br>
+            ✔ Prediction intervals show the uncertainty in forecasts<br>
+            ✔ Wider intervals indicate less confidence in the forecast</p>
+        </div>
+        
+        <hr>
+        
+        <h2 id="arima">3️⃣ ARIMA Models for Malaria Case Prediction</h2>
+        
+        <h3>Step 1: Understanding ARIMA Components</h3>
+        <div class="r-code">
+            <code>
+# ARIMA (AutoRegressive Integrated Moving Average) modeling
+
+# First, check for stationarity with ACF and PACF plots
+ggtsdisplay(malaria_ts, main = "ACF and PACF of Original Series")
+
+# If the series is not stationary, we might need to difference it
+# Check first difference
+ggtsdisplay(diff(malaria_ts, 1), main = "ACF and PACF of First Difference")
+
+# For seasonal data, we might need seasonal differencing
+# Check seasonal difference (12-month for monthly data)
+ggtsdisplay(diff(malaria_ts, 12), main = "ACF and PACF of Seasonal Difference")
+
+# Check both regular and seasonal differencing
+ggtsdisplay(diff(diff(malaria_ts, 12), 1), 
+           main = "ACF and PACF after Regular and Seasonal Differencing")
+
+# KPSS test for stationarity
+kpss_test <- kpss.test(malaria_ts)
+print(kpss_test)
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ ARIMA models require stationary data (constant mean, variance, and autocorrelation)<br>
+            ✔ <code>ggtsdisplay()</code> shows the Autocorrelation Function (ACF) and Partial Autocorrelation Function (PACF)<br>
+            ✔ ACF shows correlation with lagged values; PACF shows direct correlation without intermediate lags<br>
+            ✔ <code>diff()</code> applies differencing to make the series stationary<br>
+            ✔ <code>diff(x, 1)</code> subtracts consecutive values; <code>diff(x, 12)</code> subtracts values from 12 periods ago<br>
+            ✔ <code>kpss.test()</code> formally tests for stationarity (p > 0.05 indicates stationarity)</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 2: Automatic ARIMA Modeling</h3>
+        <div class="r-code">
+            <code>
+# Automatically select the best ARIMA model
+auto_arima <- auto.arima(malaria_ts, seasonal = TRUE, 
+                        stepwise = FALSE, approximation = FALSE)
+
+# Examine the selected model
+summary(auto_arima)
+
+# Check residuals to validate the model
+checkresiduals(auto_arima)
+
+# Plot the fitted values against the actual data
+fitted_values <- malaria_ts - auto_arima$residuals
+
+arima_fit_df <- data.frame(
+  date = malaria_data$date,
+  observed = as.numeric(malaria_ts),
+  fitted = as.numeric(fitted_values)
+)
+
+ggplot(arima_fit_df, aes(x = date)) +
+  geom_line(aes(y = observed, color = "Observed")) +
+  geom_line(aes(y = fitted, color = "Fitted"), size = 1) +
+  scale_color_manual(values = c("Observed" = "black", "Fitted" = "blue")) +
+  labs(
+    title = "ARIMA Model Fit for Malaria Cases",
+    subtitle = paste("Model:", auto_arima$method),
+    x = "Year",
+    y = "Number of Cases",
+    color = "Series"
+  ) +
+  theme_minimal()
+
+# Generate forecasts
+arima_forecast <- forecast(auto_arima, h = 24)
+
+# Plot the forecast
+autoplot(arima_forecast) +
+  labs(
+    title = "ARIMA Forecast of Malaria Cases",
+    subtitle = paste("Model:", auto_arima$method),
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ <code>auto.arima()</code> automatically selects the best ARIMA model parameters<br>
+            ✔ Parameters include p (AR order), d (differencing), q (MA order)<br>
+            ✔ <code>seasonal = TRUE</code> includes seasonal components for monthly data<br>
+            ✔ <code>stepwise = FALSE</code> performs a more thorough search for the best model<br>
+            ✔ <code>checkresiduals()</code> checks if model residuals resemble white noise<br>
+            ✔ Good model residuals should be uncorrelated and normally distributed</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 3: Manual ARIMA Model Selection</h3>
+        <div class="r-code">
+            <code>
+# Manually fit ARIMA models and compare
+# ARIMA(p,d,q)(P,D,Q)[s] has components:
+# p: autoregressive order
+# d: differencing
+# q: moving average order
+# P, D, Q: seasonal equivalents
+# s: seasonal period (12 for monthly data)
+
+# Try several models
+arima1 <- Arima(malaria_ts, order = c(1,1,1), seasonal = c(1,1,1))
+arima2 <- Arima(malaria_ts, order = c(2,1,1), seasonal = c(1,1,1))
+arima3 <- Arima(malaria_ts, order = c(1,1,2), seasonal = c(1,1,1))
+arima4 <- Arima(malaria_ts, order = c(2,1,2), seasonal = c(1,1,1))
+
+# Compare AIC (lower is better)
+models_aic <- c(
+  arima1 = arima1$aicc,
+  arima2 = arima2$aicc,
+  arima3 = arima3$aicc,
+  arima4 = arima4$aicc,
+  auto_arima = auto_arima$aicc
+)
+
+best_model <- names(which.min(models_aic))
+cat("Best model by AICc:", best_model, "\n")
+
+# Compare model accuracy through cross-validation
+# Create training set (excluding last 12 months)
+train_end <- length(malaria_ts) - 12
+train_ts <- window(malaria_ts, end = c(time(malaria_ts)[train_end]))
+
+# Fit models on training data
+train_auto <- auto.arima(train_ts, seasonal = TRUE)
+train_manual <- Arima(train_ts, order = c(2,1,2), seasonal = c(1,1,1))
+
+# Forecast 12 months and compare with actual values
+fc_auto <- forecast(train_auto, h = 12)
+fc_manual <- forecast(train_manual, h = 12)
+
+# Get actual values for comparison
+test_ts <- window(malaria_ts, start = time(malaria_ts)[train_end + 1])
+
+# Calculate accuracy metrics
+accuracy(fc_auto, test_ts)
+accuracy(fc_manual, test_ts)
+
+# Visualize forecasts vs. actuals for validation period
+validation_df <- data.frame(
+  date = malaria_data$date[(train_end+1):(train_end+12)],
+  actual = as.numeric(test_ts),
+  auto_forecast = as.numeric(fc_auto$mean),
+  manual_forecast = as.numeric(fc_manual$mean)
+)
+
+ggplot(validation_df, aes(x = date)) +
+  geom_line(aes(y = actual, color = "Actual"), size = 1) +
+  geom_line(aes(y = auto_forecast, color = "Auto ARIMA"), linetype = "dashed") +
+  geom_line(aes(y = manual_forecast, color = "Manual ARIMA"), linetype = "dotted") +
+  scale_color_manual(values = c("Actual" = "black", 
+                               "Auto ARIMA" = "blue", 
+                               "Manual ARIMA" = "red")) +
+  labs(
+    title = "Forecast Validation: Last 12 Months",
+    subtitle = "Comparing forecasts with actual values",
+    x = "Month",
+    y = "Number of Cases",
+    color = "Series"
+  ) +
+  theme_minimal()
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ Manual ARIMA modeling allows testing specific model configurations<br>
+            ✔ <code>Arima()</code> fits a model with specified parameters<br>
+            ✔ Models are compared using AICc (Akaike Information Criterion, corrected)<br>
+            ✔ Cross-validation tests performance on data not used in model training<br>
+            ✔ <code>accuracy()</code> provides RMSE, MAE, MAPE and other metrics to evaluate forecasts<br>
+            ✔ Visualization of predicted vs. actual values helps assess model performance</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 4: ARIMA Models with External Regressors</h3>
+        <div class="r-code">
+            <code>
+# ARIMAX: ARIMA with external variables (e.g., rainfall, temperature)
+# Assume we have a data frame with external predictors
+malaria_with_predictors <- malaria_data %>%
+  select(date, cases, rainfall, temperature)
+
+# Create a ts matrix of external regressors
+xreg_matrix <- cbind(
+  rainfall = ts(malaria_with_predictors$rainfall, 
+               frequency = 12, 
+               start = c(malaria_data$year[1], malaria_data$month[1])),
+  temperature = ts(malaria_with_predictors$temperature, 
+                  frequency = 12, 
+                  start = c(malaria_data$year[1], malaria_data$month[1]))
+)
+
+# Fit ARIMA model with external regressors
+arimax_model <- auto.arima(malaria_ts, xreg = xreg_matrix, seasonal = TRUE)
+
+# Examine the model
+summary(arimax_model)
+
+# Check significance of external regressors
+coef_table <- data.frame(
+  variable = c("rainfall", "temperature"),
+  coefficient = arimax_model$coef[grepl("rainfall|temperature", names(arimax_model$coef))],
+  std_error = sqrt(diag(arimax_model$var.coef))[grepl("rainfall|temperature", names(arimax_model$coef))]
+)
+
+coef_table <- coef_table %>%
+  mutate(
+    t_value = coefficient / std_error,
+    p_value = 2 * pt(-abs(t_value), df = length(malaria_ts) - length(arimax_model$coef)),
+    significance = ifelse(p_value < 0.05, "*", "")
+  )
+
+print(coef_table)
+
+# For forecasting, we need future values of external regressors
+# This could be from a separate model or known future values
+# For demonstration, we'll use seasonal means of historical data
+
+# Calculate seasonal means for each predictor
+seasonal_means <- malaria_with_predictors %>%
+  mutate(month = lubridate::month(date)) %>%
+  group_by(month) %>%
+  summarize(
+    rainfall_mean = mean(rainfall, na.rm = TRUE),
+    temperature_mean = mean(temperature, na.rm = TRUE)
+  )
+
+# Create future xreg matrix (24 months)
+future_seasons <- rep(1:12, 2)  # 24 months of future seasons
+future_xreg <- cbind(
+  rainfall = seasonal_means$rainfall_mean[future_seasons],
+  temperature = seasonal_means$temperature_mean[future_seasons]
+)
+
+# Generate forecast with external regressors
+arimax_forecast <- forecast(arimax_model, xreg = future_xreg, h = 24)
+
+# Plot the forecast
+autoplot(arimax_forecast) +
+  labs(
+    title = "ARIMAX Forecast of Malaria Cases",
+    subtitle = "Using rainfall and temperature as external predictors",
+    x = "Year",
+    y = "Number of Cases"
+  ) +
+  theme_minimal()
+
+# Compare models with and without external regressors
+cat("AICc without external regressors:", auto_arima$aicc, "\n")
+cat("AICc with external regressors:", arimax_model$aicc, "\n")
+cat("Improvement:", auto_arima$aicc - arimax_model$aicc, "\n")
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ ARIMAX models incorporate external variables as predictors (e.g., climate data)<br>
+            ✔ <code>xreg</code> parameter in <code>auto.arima()</code> includes these external regressors<br>
+            ✔ The coefficients table shows the effect of each external variable<br>
+            ✔ For forecasting, we need future values of all external predictors<br>
+            ✔ Seasonal means can be used when future predictor values are unknown<br>
+            ✔ The AICc improvement indicates whether external variables enhance the model</p>
+        </div>
+        
+        <hr>
+        
+        <h3>Step 5: Evaluating and Implementing Forecasts</h3>
+        <div class="r-code">
+            <code>
+# Final model evaluation and implementation
+
+# Select the best model (assuming ARIMAX was best)
+final_model <- arimax_model
+
+# Generate final forecast
+final_forecast <- forecast(final_model, xreg = future_xreg, h = 24)
+
+# Create a comprehensive visualization
+forecast_df <- data.frame(
+  date = seq.Date(from = max(malaria_data$date) + 30, by = "month", length.out = 24),
+  point_forecast = as.numeric(final_forecast$mean),
+  lower_80 = as.numeric(final_forecast$lower[, 1]),
+  upper_80 = as.numeric(final_forecast$upper[, 1]),
+  lower_95 = as.numeric(final_forecast$lower[, 2]),
+  upper_95 = as.numeric(final_forecast$upper[, 2])
+)
+
+# Combine with historical data
+historical_df <- data.frame(
+  date = malaria_data$date,
+  observed = as.numeric(malaria_ts)
+)
+
+# Create final plot with annotations
+ggplot() +
+  # Historical data
+  geom_line(data = historical_df, aes(x = date, y = observed), color = "black") +
+  # Point forecast
+  geom_line(data = forecast_df, aes(x = date, y = point_forecast), 
+            color = "blue", size = 1) +
+  # 95% prediction interval
+  geom_ribbon(data = forecast_df, 
+              aes(x = date, ymin = lower_95, ymax = upper_95), 
+              fill = "blue", alpha = 0.2) +
+  # 80% prediction interval
+  geom_ribbon(data = forecast_df, 
+              aes(x = date, ymin = lower_80, ymax = upper_80), 
+              fill = "blue", alpha = 0.3) +
+  # Highlight peak periods
+  geom_rect(data = forecast_df %>% 
+              filter(point_forecast > quantile(point_forecast, 0.75)),
+            aes(xmin = date - 15, xmax = date + 15, 
+                ymin = 0, ymax = Inf),
+            fill = "orange", alpha = 0.1) +
+  # Add annotations
+  annotate("text", 
+           x = forecast_df$date[which.max(forecast_df$point_forecast)], 
+           y = max(forecast_df$point_forecast) * 1.1,
+           label = "Peak period", 
+           color = "red") +
+  labs(
+    title = "Malaria Cases Forecast for Next 24 Months",
+    subtitle = "Based on historical patterns and climate variables",
+    x = "Year",
+    y = "Number of Cases",
+    caption = "Orange areas indicate predicted high-transmission periods."
+  ) +
+  theme_minimal()
+
+# Export forecast results to CSV for program planning
+forecast_export <- forecast_df %>%
+  mutate(
+    year = lubridate::year(date),
+    month = lubridate::month(date),
+    month_name = lubridate::month(date, label = TRUE, abbr = FALSE)
+  ) %>%
+  select(year, month, month_name, point_forecast, lower_95, upper_95)
+
+write.csv(forecast_export, "malaria_forecast_24months.csv", row.names = FALSE)
+
+# Create monthly report format
+monthly_format <- forecast_export %>%
+  mutate(
+    risk_level = case_when(
+      point_forecast >= quantile(point_forecast, 0.75) ~ "High",
+      point_forecast >= quantile(point_forecast, 0.25) ~ "Medium",
+      TRUE ~ "Low"
+    ),
+    recommended_action = case_when(
+      risk_level == "High" ~ "Intensify vector control and case management",
+      risk_level == "Medium" ~ "Maintain standard control measures",
+      risk_level == "Low" ~ "Focus on surveillance and prevention"
+    )
+  ) %>%
+  select(year, month_name, point_forecast, risk_level, recommended_action)
+
+print(monthly_format)
+            </code>
+        </div>
+        
+        <div class="explanation">
+            <h4>🔍 Explanation:</h4>
+            <p>✔ Final forecasts should be presented in a way that supports decision-making<br>
+            ✔ Highlighting predicted peak periods helps with resource planning<br>
+            ✔ Prediction intervals communicate the uncertainty in forecasts<br>
+            ✔ Exporting results to CSV allows sharing with non-R users<br>
+            ✔ Adding risk levels and recommended actions makes forecasts more actionable<br>
+            ✔ This approach bridges statistical analysis and practical malaria control</p>
+        </div>
+        
+        <hr>
+        
+        <h2>✅ Summary of Week 8</h2>
+        <p>By the end of this week, you should be able to:<br>
+        ✔ <strong>Decompose malaria time series</strong> to understand trend, seasonal, and irregular components<br>
+        ✔ <strong>Apply various smoothing techniques</strong> to identify underlying patterns<br>
+        ✔ <strong>Build predictive ARIMA models</strong> for forecasting future malaria cases<br>
+        ✔ <strong>Incorporate climate variables</strong> into time series models<br>
+        ✔ <strong>Generate actionable forecasts</strong> to support malaria control planning</p>
+        
+        <p>Time series analysis is crucial for understanding malaria transmission dynamics and anticipating future outbreaks, allowing for more proactive and targeted interventions.</p>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
